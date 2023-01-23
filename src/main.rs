@@ -1,34 +1,65 @@
-fn main() {
-    let sass_code = "
-        $main-color: #000000; 
-        body {
-            color: $main-color;
-        }
-    ";
+use std::fs;
+use std::path::Path;
 
-    let lines: Vec<&str> = sass_code.lines().collect();
-    let mut root_css = format!(":root {{\n");
-    let mut new_sass_lines = Vec::new();
+fn find_scss_files(path: &Path) -> Vec<String> {
+    let mut scss_files = Vec::new();
 
-    for line in lines {
-        let line = line.trim().replace("$", "--");
+    if path.is_dir() {
+        for file in fs::read_dir(&path).unwrap() {
+            let file = file.unwrap();
+            let file_path = file.path();
 
-        if line.starts_with("--") {
-            let formated_line = format!("{}\n", line);
-            root_css += &formated_line;
-        } else {
-            if line.contains("--") {
-                let css_rule = line.split("--").nth(0).unwrap();
-                let css_variable_with_semicollon = line.split("--").nth(1).unwrap();
-                let css_variable = css_variable_with_semicollon.replace(";", "");
-
-                let formated_line = format!("{} var(--{});", css_rule, css_variable);
-                new_sass_lines.push(formated_line);
+            if file_path.is_dir() {
+                scss_files.extend(find_scss_files(&file_path));
             } else {
-                new_sass_lines.push(line);
+                if file_path.extension().map(|s| s == "scss").unwrap_or(false) {
+                    scss_files.push(file_path.to_str().unwrap().to_owned())
+                }
             }
         }
     }
 
-    let new_sass_code = root_css + &new_sass_lines.join("\n");
+    scss_files
+}
+
+fn main() {
+    let project_path = Path::new("./");
+    let scss_files = find_scss_files(project_path);
+
+    for file_name in scss_files {
+        let scss_code = fs::read_to_string(&file_name).unwrap();
+
+        if !scss_code.contains("$") {
+            return;
+        }
+
+        let lines: Vec<&str> = scss_code.lines().collect();
+        let mut root_css = format!(":root {{\n");
+        let mut new_scss_lines = Vec::new();
+
+        for line in lines {
+            let line = line.trim().replace("$", "--");
+
+            if line.starts_with("--") {
+                let formated_line = format!("{}\n", line);
+                root_css += &formated_line;
+            } else {
+                if line.contains("--") {
+                    let css_rule = line.split("--").nth(0).unwrap();
+                    let css_variable_with_semicollon = line.split("--").nth(1).unwrap();
+                    let css_variable = css_variable_with_semicollon.replace(";", "");
+
+                    let formated_line = format!("{} var(--{});", css_rule, css_variable);
+                    new_scss_lines.push(formated_line);
+                } else {
+                    new_scss_lines.push(line);
+                }
+            }
+        }
+
+        root_css = root_css + "}";
+
+        let new_scss_code = root_css + &new_scss_lines.join("\n");
+        fs::write(file_name, new_scss_code).unwrap();
+    }
 }
